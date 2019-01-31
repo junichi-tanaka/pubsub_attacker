@@ -17,13 +17,14 @@ func main() {
 }
 
 type envConfig struct {
-	CredentialJsonPath string `envconfig:"CREDENTIAL_JSON_PATH" default:"jsonpath"`
+	CredentialJsonPath string `envconfig:"CREDENTIAL_JSON_PATH" default:""`
 	TopicName          string `envconfig:"TOPIC_NAME" default:"my-topic"`
 	Port               string `envconfig:"PORT" default:"8000"`
+	ProjectId          string `envconfig:"GCP_PROJECT_ID" default:"my-project-id"`
 }
 
 func _main(args []string) int {
-	log.Printf("start cloud pusbus client")
+	log.Printf("start cloud pubsub client")
 	var envs envConfig
 	err := envconfig.Process("", &envs)
 	if err != nil {
@@ -33,9 +34,14 @@ func _main(args []string) int {
 
 	log.Printf("environment: %v", envs)
 
+	var opts []option.ClientOption
+	if envs.CredentialJsonPath != "" {
+		opts = append(opts, option.WithCredentialsFile(envs.CredentialJsonPath))
+	}
+
 	c := new(cloudHandle)
 	ctx := context.Background()
-	c.client, err = pubsub.NewClient(ctx, "project-id", option.WithCredentialsFile(envs.CredentialJsonPath))
+	c.client, err = pubsub.NewClient(ctx, envs.ProjectId, opts...)
 	c.topic = c.client.Topic(envs.TopicName)
 	if err != nil {
 		log.Printf("failed to create pubsub client")
@@ -61,7 +67,7 @@ func (c cloudHandle) handler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	v := r.FormValue("msg")
 	// not handle error
-	_ := c.topic.Publish(ctx, &pubsub.Message{Data: []byte(v)})
+	c.topic.Publish(ctx, &pubsub.Message{Data: []byte(v)})
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(v))
 	return
